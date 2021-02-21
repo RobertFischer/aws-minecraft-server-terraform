@@ -1,0 +1,99 @@
+name:                StartStopLambda
+version:             0.1.0.0
+github:              "RobertFischer/StartStopLambda"
+license:             Unliscense
+author:              "Robert Fischer"
+maintainer:          "smokejumperit@gmail.com"
+copyright:           "(c)2021 Robert Fischer. All Rights Reserved. See LICENSE for liscensing terms."
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/RobertFischer/StartStopLambda#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- aeson >= 1.5.5.1 && < 1.6
+- text >= 1.2.4.0 && < 1.3
+- unliftio >=0.1 && < 0.3
+- unliftio-core >=0.1 && < 0.3
+- amazonka >= 1.6.1 && < 1.7
+- amazonka-ec2 >= 1.6.1 && < 1.7
+
+# These options are global, so don't put optimization or runtime options here.
+ghc-options:
+- -Wall
+- -Wincomplete-record-updates
+- -Wincomplete-uni-patterns
+- -fprint-expanded-synonyms
+- -fprint-explicit-coercions
+- -fprint-equality-relations
+- -fprint-typechecker-elaboration
+- -freverse-errors
+- -funclutter-valid-hole-fits
+- -fhelpful-errors
+- -fshow-warning-groups
+- -fPIC
+- -fno-warn-tabs
+- -fno-warn-type-defaults
+- -Werror=compat
+- -Werror=partial-fields
+- -Werror=missing-fields
+- -Werror=incomplete-patterns
+- -Werror=overlapping-patterns
+- -Werror=redundant-constraints
+
+library:
+  source-dirs: src
+  dependencies: []  # These are all up top
+
+  # This is where the optimization flags should go
+  ghc-options:
+  - -O2
+  - -feager-blackholing
+  - -fexcess-precision
+  - -flate-dmd-anal
+  - -fmax-inline-alloc-size=1024
+  - -fmax-simplifier-iterations=16
+  - -fsimplifier-phases=8
+  - -fspec-constr-keen
+  - -fspec-constr-count=12
+  - -fspecialise-aggressively
+  - -flate-specialise
+  - -fstatic-argument-transformation
+
+executables:
+  StartStopApp:
+    main:                Main.hs
+    source-dirs:         app
+    dependencies:
+    - StartStopLambda
+
+    # And this is where the runtime flags should go
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    - -O
+
+tests:
+  StartStopLambda-test:
+    main:                Spec.hs
+    source-dirs:         test
+    dependencies:
+    - StartStopLambda
+
+    # These should look a lot like the executable flags.
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    - -O0

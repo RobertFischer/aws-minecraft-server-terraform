@@ -1,0 +1,10 @@
+#!/bin/bash
+
+set -o pipefail
+set -exu
+
+cd "$(dirname "$0")/.."
+
+HOST="$(./script/host)"
+
+exec ssh -i ./keys/ec2-user ec2-user@$HOST -v "$@"

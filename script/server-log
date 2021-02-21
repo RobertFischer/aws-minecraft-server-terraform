@@ -1,0 +1,9 @@
+#!/bin/bash
+
+set -o pipefail
+set -exu
+
+cd "$(dirname "$0")"
+
+./ssh journalctl --unit minecraft
+./ssh systemctl status minecraft

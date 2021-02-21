@@ -1,0 +1,23 @@
+#!/bin/bash
+
+set -o pipefail
+set -exu
+
+SLUG="${1:-minecraft}"
+
+which stack || ( brew install haskell-stack ) || ( curl -sSL https://get.haskellstack.org/ | sh ) || ( wget -qO- https://get.haskellstack.org/ | sh )
+( terraform -version | grep v0.14 ) || ( brew install terraform@0.14 ) || ( brew install terraform ) || ( echo "Please install Terraform v0.14" && exit -1 )
+
+stack upgrade
+
+cd "$(dirname "$0")/.."
+ROOTDIR="$(pwd)"
+
+cd "$ROOTDIR/keys"
+test -f ./gamer || ssh-keygen -t rsa -b 4096 -f ./gamer -N ''
+test -f "./$SLUG" || ssh-keygen -t rsa -b 4096 -f "./$SLUG" -N ''
+chmod 0600 ./*
+
+cd "$ROOTDIR"
+test -f ./backend.tf || ( echo '# Insert your backend configuration here' | tee ./backend.tf )
+

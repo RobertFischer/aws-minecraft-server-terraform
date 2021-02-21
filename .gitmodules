@@ -1,0 +1,3 @@
+[submodule "vendor/hs-aws-lambda"]
+	path = lambda/vendor/hs-aws-lambda
+	url = git@github.com:RobertFischer/hs-aws-lambda.git

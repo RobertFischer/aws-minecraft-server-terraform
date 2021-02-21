@@ -1,0 +1,8 @@
+*.tfvars
+.terraform
+backend.tf
+config.zip
+*.log
+*.tfstate
+*.backup
+*.ignore

@@ -1,0 +1,12 @@
+#!/bin/bash
+
+set -o pipefail
+set -exu
+
+cd "$(dirname "$0")/.."
+
+INSTANCE_ID="${INSTANCE_ID:-$(terraform output server.id)}"
+AWS_PROFILE="${AWS_PROFILE:-$(terraform output aws.profile)}"
+
+aws ec2 wait instance-running --instance-ids "$INSTANCE_ID" --profile "$AWS_PROFILE"
+aws ec2 wait instance-status-ok --instance-ids "$INSTANCE_ID" --profile "$AWS_PROFILE"

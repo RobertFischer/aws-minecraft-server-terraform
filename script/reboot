@@ -1,0 +1,12 @@
+#!/bin/bash
+
+set -o pipefail
+set -exu
+
+cd "$(dirname "$0")/.."
+
+INSTANCE_ID="${INSTANCE_ID:-$(terraform output server.id)}"
+AWS_PROFILE="${AWS_PROFILE:-$(terraform output aws.profile)}"
+
+aws ec2 reboot-instances --instance-ids "$INSTANCE_ID" --profile "$AWS_PROFILE"
+./script/wait-for-ok
