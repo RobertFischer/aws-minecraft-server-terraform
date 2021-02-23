@@ -1,4 +1,5 @@
 locals {
+  node_modules_pkgs = length(fileset("${path.module}/lambda/node_modules", "**/package.json"))
   lambda_name = "${var.slug}startstop"
   keydir      = "${path.module}/keys"
   name_prefix = "${var.slug}_"
@@ -385,7 +386,7 @@ resource "aws_instance" "main" {
   subnet_id                            = aws_subnet.main.id
   associate_public_ip_address          = true
   iam_instance_profile                 = aws_iam_instance_profile.main_efs_user.name
-  cpu_threads_per_core                 = 2
+  cpu_threads_per_core                 = 1
   credit_specification {
     cpu_credits = "standard"
   }
@@ -486,10 +487,16 @@ resource "random_password" "rcon" {
   }
 }
 
-resource "aws_cloudwatch_event_rule" "good_morning" {
-  name_prefix         = "${var.slug}_start_"
-  description         = "Turns on the ${var.slug} server"
-  schedule_expression = var.start_at
+resource "aws_cloudwatch_event_rule" "good_morning_wday" {
+  name_prefix         = "${var.slug}_start_wday_"
+  description         = "Turns on the ${var.slug} server on weekday mornings"
+  schedule_expression = var.start_at_weekday
+}
+
+resource "aws_cloudwatch_event_rule" "good_morning_wend" {
+  name_prefix         = "${var.slug}_start_wend_"
+  description         = "Turns on the ${var.slug} server on weekend mornings"
+  schedule_expression = var.start_at_weekend
 }
 
 resource "aws_cloudwatch_event_rule" "good_night" {
@@ -543,7 +550,7 @@ resource "random_pet" "deployment_name" {
 
 data "aws_iam_policy_document" "lambda" {
   statement {
-    actions   = ["ec2:StartInstance", "ec2:StopInstance"]
+    actions   = ["ec2:StartInstances", "ec2:StopInstances"]
     resources = [aws_instance.main.arn]
   }
 }
@@ -569,13 +576,30 @@ resource "aws_iam_role_policy_attachment" "lambda_default" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaRole"
 }
 
+resource null_resource build_lambda_code {
+  triggers = {
+    yarn_lock = filebase64sha256("${path.module}/lambda/yarn.lock")
+    index_js = filebase64sha256("${path.module}/lambda/index.js")
+    node_modules = local.node_modules_pkgs == 0 ? timestamp() : local.node_modules_pkgs
+  }
+  provisioner "local-exec" {
+    working_dir = "${path.module}/lambda"
+    command     = "rm -rf ./node_modules"
+  }
+  provisioner "local-exec" {
+    working_dir = "${path.module}/lambda"
+    command     = "yarn install --production --frozen-lockfile --no-link-bins"
+  }
+
+}
+
 data archive_file lambda_code {
   type = "zip"
   output_path = "${path.module}/lambda.zip"
-  source {
-    content = file("${path.module}/lambda/index.js")
-    filename = "index.js"
-  }
+  source_dir = "${path.module}/lambda"
+  depends_on = [
+    null_resource.build_lambda_code
+  ]
 }
 
 data aws_iam_policy_document lambda_assume_role {
@@ -592,7 +616,6 @@ resource aws_iam_role lambda {
   name_prefix = "start-stop-instance-lambda-"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 }
-
 
 
 resource aws_cloudwatch_log_group lambda {
@@ -626,10 +649,6 @@ resource aws_lambda_function start_stop_instance {
   runtime = "nodejs14.x"
   filename = data.archive_file.lambda_code.output_path
   source_code_hash = data.archive_file.lambda_code.output_base64sha256
-  vpc_config {
-    security_group_ids = [ aws_security_group.main.id ]
-    subnet_ids = [ aws_subnet.main.id ]
-  }
   depends_on = [
     aws_iam_role_policy.cw_logs,
   ]
@@ -637,7 +656,8 @@ resource aws_lambda_function start_stop_instance {
 
 resource "aws_lambda_permission" "allow_cloudwatch" {
   for_each = toset([
-    aws_cloudwatch_event_rule.good_morning.arn,
+    aws_cloudwatch_event_rule.good_morning_wday.arn,
+    aws_cloudwatch_event_rule.good_morning_wend.arn,
     aws_cloudwatch_event_rule.good_night.arn,
   ])
   action        = "lambda:InvokeFunction"
@@ -646,16 +666,34 @@ resource "aws_lambda_permission" "allow_cloudwatch" {
   source_arn    = each.value
 }
 
-resource "aws_cloudwatch_event_target" "start_stop_server" {
-  for_each = {
-    "start" : aws_cloudwatch_event_rule.good_morning.name,
-    "stop" : aws_cloudwatch_event_rule.good_night.name,
-  }
+resource "aws_cloudwatch_event_target" "start_server" {
+  for_each = toset([
+    aws_cloudwatch_event_rule.good_morning_wday.name,
+    aws_cloudwatch_event_rule.good_morning_wend.name,
+  ])
   arn  = aws_lambda_function.start_stop_instance.arn
   rule = each.value
   input_transformer {
     input_template = jsonencode({
-      command = each.key
+      command = "start"
+      arn     = aws_instance.main.arn
+      instanceId = aws_instance.main.id
+    })
+  }
+  depends_on = [
+    aws_lambda_permission.allow_cloudwatch
+  ]
+}
+
+resource "aws_cloudwatch_event_target" "stop_server" {
+  for_each = toset([
+    aws_cloudwatch_event_rule.good_night.name,
+  ])
+  arn  = aws_lambda_function.start_stop_instance.arn
+  rule = each.value
+  input_transformer {
+    input_template = jsonencode({
+      command = "stop"
       arn     = aws_instance.main.arn
       instanceId = aws_instance.main.id
     })

@@ -1,10 +1,15 @@
 const { EC2Client, StartInstancesCommand, StopInstancesCommand } = require("@aws-sdk/client-ec2");
 
-const client = new EC2Client();
 
-exports.handler = async function StartStopInstanceHandler(evt, ctx) {
+exports.handler = async function StartStopInstanceHandler(evt) {
+	console.debug("Initializing the EC2 client");
+	const client = new EC2Client();
+	console.debug("Looking up request", evt);
 	const request = lookupRequest(evt);
-	await client.send(request);
+	console.debug("Sending request", JSON.stringify(request, null, 2));
+	const result = await client.send(request);
+	console.debug("Sent request successfully", result);
+	return result;
 }
 
 function lookupRequest(evt) {
@@ -16,11 +21,11 @@ function lookupRequest(evt) {
 		throw new Error(`No command in the event: ${JSON.stringify(evt)}`);
 	}
 	if(command === "start") {
-		return new StartInstanceCommand({
+		return new StartInstancesCommand({
 			InstanceIds: [ instanceId ]
 		});
 	} else if (command === "stop") {
-		return new StopInstanceCommand({
+		return new StopInstancesCommand({
 			InstanceIds: [ instanceId ]
 		});
 	} else {

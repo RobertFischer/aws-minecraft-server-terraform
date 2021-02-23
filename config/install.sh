@@ -36,7 +36,5 @@ sleep 1m
 systemctl enable "${slug}"
 sleep 1m
 systemctl status "${slug}"
-sleep 1m
-journalctl --unit "${slug}"
 echo "Started the service"
 
