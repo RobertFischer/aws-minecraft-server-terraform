@@ -1,5 +1,5 @@
 locals {
-  lambda_name = "${var.slug}-instance-start-stop"
+  lambda_name = "${var.slug}startstop"
   keydir      = "${path.module}/keys"
   name_prefix = "${var.slug}_"
   az          = data.aws_availability_zones.available.names[0]
@@ -337,6 +337,43 @@ resource "aws_iam_instance_profile" "main_efs_user" {
   role        = aws_iam_role.efs_user.name
 }
 
+data archive_file config {
+
+  type = "zip"
+  output_path = "${path.module}/config.zip"
+
+  source {
+    content = templatefile("${path.module}/config/install.sh", local.basic_interps)
+    filename = "config/install.sh"
+  }
+
+  source {
+    content = templatefile("${path.module}/config/log4j2.xml", local.basic_interps)
+    filename = "config/server/log4j2.xml"
+  }
+
+  source {
+    content = templatefile("${path.module}/config/server.properties", local.basic_interps)
+    filename = "config/server/server.properties"
+  }
+
+  source {
+    content = "eula=true\n"
+    filename = "config/server/eula.txt"
+  }
+
+  source {
+    content = jsonencode(local.ops)
+    filename = "config/server/ops.json"
+  }
+
+  source {
+    content = templatefile("${path.module}/config/minecraft.service", local.basic_interps)
+    filename = "config/minecraft.service"
+  }
+
+}
+
 resource "aws_instance" "main" {
   ami                                  = data.aws_ami.main.image_id
   key_name                             = aws_key_pair.main.key_name
@@ -372,8 +409,8 @@ resource "aws_instance" "main" {
   ]
 
   provisioner "file" {
-    source      = "./config"
-    destination = "."
+    source      = data.archive_file.config.output_path
+    destination = "./config.zip"
     connection {
       type        = "ssh"
       user        = "ec2-user"
@@ -384,10 +421,10 @@ resource "aws_instance" "main" {
 
   provisioner "remote-exec" {
     inline = [
+      "unzip ./config.zip",
       "chmod +x ./config/install.sh",
       "sudo ./config/install.sh",
-      "sudo df -T",
-      "sudo ls -alRh '${local.mountdir}'",
+      "sudo df -T"
     ]
     connection {
       type        = "ssh"
@@ -511,18 +548,91 @@ data "aws_iam_policy_document" "lambda" {
   }
 }
 
-/*
-module "lambda" {
-  source       = "./lambda/terraform"
-  lambda_name  = local.lambda_name
-  ecr_repo_url = module.ecr.repo_url
+resource "aws_iam_role_policy" "lambda" {
+  name_prefix = "instance_start_stop_"
+  role        = aws_iam_role.lambda.id
+  policy      = data.aws_iam_policy_document.lambda.json
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_basics" {
+  role       = aws_iam_role.lambda.id
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_vpc" {
+  role       = aws_iam_role.lambda.id
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_default" {
+  role       = aws_iam_role.lambda.id
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaRole"
+}
+
+data archive_file lambda_code {
+  type = "zip"
+  output_path = "${path.module}/lambda.zip"
+  source {
+    content = file("${path.module}/lambda/index.js")
+    filename = "index.js"
+  }
+}
+
+data aws_iam_policy_document lambda_assume_role {
+  statement {
+    actions = [ "sts:AssumeRole" ]
+    principals {
+      type = "Service"
+      identifiers = [ "lambda.amazonaws.com" ]
+    }
+  }
+}
+
+resource aws_iam_role lambda {
+  name_prefix = "start-stop-instance-lambda-"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 }
 
 
-resource "aws_iam_role_policy" "lambda" {
-  name_prefix = "instance_start_stop"
-  role        = module.lambda.lambda.role
-  policy      = data.aws_iam_policy_document.lambda.json
+
+resource aws_cloudwatch_log_group lambda {
+  name = "/aws/lambda/${local.lambda_name}"
+  retention_in_days = 1
+}
+
+data aws_iam_policy_document cw_logs {
+  statement {
+    actions = [
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+    ]
+    resources = [
+      aws_cloudwatch_log_group.lambda.arn,
+      "${aws_cloudwatch_log_group.lambda.arn}/*",
+    ]
+  }
+}
+
+resource aws_iam_role_policy cw_logs {
+  name_prefix = "cloudwatch_logs_"
+  role = aws_iam_role.lambda.id
+  policy = data.aws_iam_policy_document.cw_logs.json
+}
+
+resource aws_lambda_function start_stop_instance {
+  function_name = local.lambda_name
+  handler = "index.handler"
+  role = aws_iam_role.lambda.arn
+  runtime = "nodejs14.x"
+  filename = data.archive_file.lambda_code.output_path
+  source_code_hash = data.archive_file.lambda_code.output_base64sha256
+  vpc_config {
+    security_group_ids = [ aws_security_group.main.id ]
+    subnet_ids = [ aws_subnet.main.id ]
+  }
+  depends_on = [
+    aws_iam_role_policy.cw_logs,
+  ]
 }
 
 resource "aws_lambda_permission" "allow_cloudwatch" {
@@ -530,31 +640,28 @@ resource "aws_lambda_permission" "allow_cloudwatch" {
     aws_cloudwatch_event_rule.good_morning.arn,
     aws_cloudwatch_event_rule.good_night.arn,
   ])
-  statement_id  = "AllowExecutionFromCloudWatch"
   action        = "lambda:InvokeFunction"
-  function_name = module.lambda.lambda.name
+  function_name = aws_lambda_function.start_stop_instance.function_name
   principal     = "events.amazonaws.com"
   source_arn    = each.value
 }
 
 resource "aws_cloudwatch_event_target" "start_stop_server" {
   for_each = {
-    "start" : aws_cloudwatch_event_rule.good_morning.arn,
-    "stop" : aws_cloudwatch_event_rule.good_night.arn,
+    "start" : aws_cloudwatch_event_rule.good_morning.name,
+    "stop" : aws_cloudwatch_event_rule.good_night.name,
   }
-  arn  = module.lambda.lambda.arn
+  arn  = aws_lambda_function.start_stop_instance.arn
   rule = each.value
   input_transformer {
     input_template = jsonencode({
       command = each.key
       arn     = aws_instance.main.arn
+      instanceId = aws_instance.main.id
     })
   }
+  depends_on = [
+    aws_lambda_permission.allow_cloudwatch
+  ]
 }
-*/
 
-
-module "ecr" {
-  source      = "./ecr"
-  lambda_name = local.lambda_name
-}

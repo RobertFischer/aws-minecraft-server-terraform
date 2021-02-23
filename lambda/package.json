@@ -1,0 +1,9 @@
+{
+  "name": "start-stop-instance-lambda",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "@aws-sdk/client-ec2": "^3.6.0"
+  }
+}

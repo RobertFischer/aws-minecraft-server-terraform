@@ -16,8 +16,3 @@ output "aws" {
   }
 }
 
-output "ecr" {
-  description = "The ECR module"
-  value       = module.ecr
-}
-
