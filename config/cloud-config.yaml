@@ -1,0 +1,41 @@
+#cloud-config
+apt_update: true
+apt_upgrade: all
+apt_reboot_if_required: true
+
+packages:
+  - amazon-efs-utils
+  - autoconf
+  - automake
+  - curl
+  - gcc
+  - gcc-c++
+  - git
+  - java-11-amazon-corretto-headless
+  - libtool
+  - nfs-utils
+  - patch
+  - wget
+  - zsh
+
+timezone: "${timezone}"
+
+groups:
+  - maintainers: [ 'root', 'ec2-user', 'gamer' ]
+
+users:
+  - default
+  - name: gamer
+    shell: "/bin/zsh"
+    sudo: false
+    home: "${homedir}"
+    ssh_authorized_keys:
+      - '${file("${heredir}/keys/gamer.pub")}'
+
+swap:
+  filename: /swap
+  size: auto
+  maxsize: 8589934592
+
+ntp:
+  enabled: true

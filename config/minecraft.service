@@ -1,0 +1,28 @@
+[Unit]
+Description=Minecraft server
+Requires=network.target 
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/java -Xcomp -Xrs -Xshare:off -Xmx8192m -Xms1536m -Dlog4j.configurationFile=log4j2.xml -jar server.jar nogui
+ExecStop=${homedir}/tools/mcrcon/mcrcon -H localhost -P 25575  -p '${rcon_password}' stop
+Group=gamer
+IOSchedulingClass=best-effort
+IOSchedulingPriority=1
+KillMode=none
+Nice=1
+NoNewPrivileges=true
+OOMScoreAdjust=100
+PrivateDevices=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWriteDirectories=${homedir}/server
+Restart=always
+RuntimeDirectory=minecraft
+User=gamer
+WorkingDirectory=${homedir}/server
+
+[Install]
+WantedBy=multi-user.target
+
