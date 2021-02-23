@@ -5,5 +5,5 @@ set -exu
 
 cd "$(dirname "$0")"
 
-./ssh journalctl --unit minecraft
 ./ssh systemctl status minecraft
+./ssh journalctl --unit minecraft --follow
