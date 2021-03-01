@@ -390,7 +390,12 @@ resource "aws_instance" "main" {
   credit_specification {
     cpu_credits = "standard"
   }
-  user_data_base64 = base64gzip(templatefile("${path.module}/config/cloud-config.yaml", local.basic_interps))
+  user_data_base64 = base64gzip(templatefile("${path.module}/config/cloud-config.yaml",
+    merge(
+      local.basic_interps,
+      { config_zip_sha256 = data.archive_file.config.output_base64sha256 }
+    )
+  ))
   volume_tags      = local.tags
   root_block_device {
     volume_size = 16
@@ -407,6 +412,7 @@ resource "aws_instance" "main" {
     aws_efs_file_system_policy.efs_user,
     aws_iam_role_policy_attachment.efs_utils,
     aws_iam_role_policy_attachment.backup_policy,
+    data.archive_file.config,
   ]
 
   provisioner "file" {
@@ -487,16 +493,10 @@ resource "random_password" "rcon" {
   }
 }
 
-resource "aws_cloudwatch_event_rule" "good_morning_wday" {
-  name_prefix         = "${var.slug}_start_wday_"
-  description         = "Turns on the ${var.slug} server on weekday mornings"
-  schedule_expression = var.start_at_weekday
-}
-
-resource "aws_cloudwatch_event_rule" "good_morning_wend" {
-  name_prefix         = "${var.slug}_start_wend_"
-  description         = "Turns on the ${var.slug} server on weekend mornings"
-  schedule_expression = var.start_at_weekend
+resource "aws_cloudwatch_event_rule" "good_morning" {
+  name_prefix         = "${var.slug}_start_"
+  description         = "Turns on the ${var.slug} server on the mornings"
+  schedule_expression = var.start_at
 }
 
 resource "aws_cloudwatch_event_rule" "good_night" {
@@ -656,8 +656,7 @@ resource aws_lambda_function start_stop_instance {
 
 resource "aws_lambda_permission" "allow_cloudwatch" {
   for_each = toset([
-    aws_cloudwatch_event_rule.good_morning_wday.arn,
-    aws_cloudwatch_event_rule.good_morning_wend.arn,
+    aws_cloudwatch_event_rule.good_morning.arn,
     aws_cloudwatch_event_rule.good_night.arn,
   ])
   action        = "lambda:InvokeFunction"
@@ -666,16 +665,16 @@ resource "aws_lambda_permission" "allow_cloudwatch" {
   source_arn    = each.value
 }
 
-resource "aws_cloudwatch_event_target" "start_server" {
-  for_each = toset([
-    aws_cloudwatch_event_rule.good_morning_wday.name,
-    aws_cloudwatch_event_rule.good_morning_wend.name,
-  ])
+resource "aws_cloudwatch_event_target" "start_stop_server" {
+  for_each = {
+    "start": aws_cloudwatch_event_rule.good_morning.name,
+    "stop": aws_cloudwatch_event_rule.good_night.name,
+  }
   arn  = aws_lambda_function.start_stop_instance.arn
   rule = each.value
   input_transformer {
     input_template = jsonencode({
-      command = "start"
+      command = each.key
       arn     = aws_instance.main.arn
       instanceId = aws_instance.main.id
     })
@@ -685,21 +684,4 @@ resource "aws_cloudwatch_event_target" "start_server" {
   ]
 }
 
-resource "aws_cloudwatch_event_target" "stop_server" {
-  for_each = toset([
-    aws_cloudwatch_event_rule.good_night.name,
-  ])
-  arn  = aws_lambda_function.start_stop_instance.arn
-  rule = each.value
-  input_transformer {
-    input_template = jsonencode({
-      command = "stop"
-      arn     = aws_instance.main.arn
-      instanceId = aws_instance.main.id
-    })
-  }
-  depends_on = [
-    aws_lambda_permission.allow_cloudwatch
-  ]
-}
 

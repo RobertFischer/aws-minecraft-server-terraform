@@ -30,10 +30,8 @@ chmod o-o,ug+x "${homedir}/tools/mcrcon/mcrcon"
 # Start the daemon
 echo "Reloading and starting the service"
 systemctl daemon-reload
-sleep 1m
-systemctl start "${slug}"
-sleep 1m
 systemctl enable "${slug}"
+systemctl start "${slug}"
 sleep 1m
 systemctl status "${slug}"
 echo "Started the service"

@@ -23,6 +23,9 @@ timezone: "${timezone}"
 groups:
   - maintainers: [ 'root', 'ec2-user', 'gamer' ]
 
+runcmd:
+  - [ 'sh', '-c', 'echo', 'Config SHA256: ${config_zip_sha256}' ]
+
 users:
   - default
   - name: gamer

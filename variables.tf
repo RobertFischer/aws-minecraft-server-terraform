@@ -72,20 +72,14 @@ variable "motd" {
   default     = "Enjoy!"
 }
 
-variable "start_at_weekend" {
-  type        = string
-  description = "Cron expression that specifies when to start the server on weekends"
-  default     = "cron(50 11 * * ? 0,6)" // 6:50AM EST
-}
-
-variable "start_at_weekday" {
+variable "start_at" {
   type        = string
   description = "Cron expression that specifies when to start the server"
-  default     = "cron(50 19 * * ? 1-5)" // 2:50PM EST
+  default     = "cron(50 11 * * ? *)" // 6:50AM EST
 }
 
 variable "stop_at" {
   type        = string
   description = "Cron expression that specifies when to start the server"
-  default     = "cron(0 2 * * ? *)" // 9PM EST
+  default     = "cron(0 3 * * ? *)" // 10PM EST
 }
